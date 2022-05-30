@@ -1,0 +1,65 @@
+#!/home/sergey/anaconda3/bin/python
+from __future__ import print_function
+from unidecode import unidecode
+import pyxb.xmlschema
+import pyxb.binding.generate
+import pyxb.utils.utility
+import pyxb.utils.domutils
+from pyxb.utils import six
+import pyxb.utils.saxutils
+import os.path
+import sys
+import optparse
+import re
+
+# trac/139: Ensure that libxml2's XmlReader is used.  This must be done
+# before external schema are resolved.
+pyxb.utils.saxutils.SetCreateParserModules(['drv_libxml2'])
+
+# trac/141: Replace the standard routine for generating identifiers with
+# one that transliterates Japanese characters into characters allowed
+# in Python2 identifiers
+
+def ConvertRuIdentifier (identifier):
+    identifier = six.text_type(identifier)
+    identifier = unidecode(identifier)
+    return identifier
+
+pyxb.utils.utility._SetXMLIdentifierToPython(ConvertRuIdentifier)
+
+# The rest of this is the standard pyxbgen, with the WSDL support code
+# removed.
+
+generator = pyxb.binding.generate.Generator()
+parser = generator.optionParser()
+
+(options, args) = parser.parse_args()
+
+generator.applyOptionValues(options, args)
+
+generator.resolveExternalSchema()
+
+if 0 == len(generator.namespaces()):
+    parser.print_help()
+    sys.exit(1)
+
+import sys
+import traceback
+
+# Save binding source first, so name-in-binding is stored in the
+# parsed schema file
+try:
+    tns = generator.namespaces().pop()
+    modules = generator.bindingModules()
+    print('Python for %s requires %d modules' % (tns, len(modules)))
+
+    top_module = None
+    path_dirs = set()
+    for m in modules:
+        m.writeToModuleFile()
+
+    generator.writeNamespaceArchive()
+except Exception as e:
+    print('Exception generating bindings: %s' % (e,))
+    traceback.print_exception(*sys.exc_info())
+    sys.exit(3)
